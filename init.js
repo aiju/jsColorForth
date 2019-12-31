@@ -18,6 +18,7 @@ var forth = `
 [ 24 load 26 load 28 load 30 load ] 
 : dump 32 load ; 
 : icons 34 load ; 
+: pi 40 load ;
 : colors 56 load ;
 [ mark empty ] 
 #24
@@ -196,6 +197,19 @@ var forth = `
 ( Edit icon ) 
 #38
 #40
+( Calculate Pi )
+& c 8190
+& b 0
+: a 42 256 * ;
+: init 8189 for 2000 a i + ! -next ;
+: g b @ 2* 4294967295 + ;
+: d1 b @ * b @ a + @ 10000 * + ;
+: si b @ for i b ! d1 g /mod b @ a + ! next ;
+: o1 c @ 4294967282 + dup c ! 4294967295 + b ! 10000 mod dup ;
+: o2 10000 /mod push + . drop pop ;
+: loop c @ 15 less drop drop if ; then o1 si o2 loop ;
+: ok show black screen text init 0 loop ;
+[ ok ]
 #42
 #44
 #45
@@ -416,7 +430,7 @@ function assemble(src) {
 		}
 		blocks[cur].push.apply(blocks[cur], r);
 	}
-	var r = new Uint32Array(256 * 63);
+	var r = new Uint32Array(256 * 128);
 	for(var i = 0; i < 63; i++){
 		var b = blocks[i];
 		if(b !== undefined)
