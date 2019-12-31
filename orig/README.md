@@ -3,6 +3,7 @@ There are three parts:
 - Assembly language code in `*.ASM` files
 - Icons
 - colorForth code
+
 The latter two are only distributed as part of the `COLOR.COM` image.
 `forth.txt` contains the decompiled colorForth code in text form, using idiosyncratic syntax instead of colours.
 `forth.html` is the same, but in Technicolor.
