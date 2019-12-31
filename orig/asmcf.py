@@ -115,7 +115,7 @@ for l in f:
 			assert not cyan and (next == '' or next == 'magenta-num')
 			blocks[cur] += do_number(int(w[1:], 16), True, execute, next == 'magenta-num')
 			next = ''
-		elif w == 'MagentaV':
+		elif w == '&':
 			assert not execute and not cyan and next == ''
 			next = 'magenta'
 		else:
