@@ -424,7 +424,6 @@ function variable(word) {
 	nojit[dict.length] = true;
 	dict.push(0);
 	let a = next;
-	dict_name[h] = dechuck(word);
 	macro0.push(word & -16);
 	forth2.push(dict.length);
 	dict.push(0);
