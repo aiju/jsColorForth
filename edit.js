@@ -348,6 +348,7 @@ var ekeys = (function() {
 	}
 	function $eout() {
 		ret.pop();
+		ret.pop();
 		DROP();
 		DROP();
 		aword = $EX1;

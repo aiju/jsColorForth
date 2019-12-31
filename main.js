@@ -248,13 +248,13 @@ function wakeup() {
 	}
 }
 
-function delay() {
+function $delay() {
 	let expired = false;
 	setTimeout(() => {expired = true; wakeup();}, 250);
 	DROP();
 	ret.push(() => $SLEEP(() => expired));
 }
-builtin("delay", delay);
+builtin("delay", $delay);
 
 function $ABORT() {
 	curs = next;
@@ -437,6 +437,26 @@ function variable(word) {
 	lit = adup;
 	next++;
 }
+
+var spaces = [
+	$qIGNORE,
+	$execute,
+	NUM,
+	macrod,
+	$qCOMPILE,
+	cNUM,
+	cSHORT,
+	$COMPILE,
+	SHORT_,
+	nul,
+	nul,
+	nul,
+	variable,
+	nul,
+	nul,
+	nul
+];
+
 
 function cdrop() {
 	list[0] = here;
@@ -692,25 +712,6 @@ function jit(h) {
 	f.$ = p.$;
 	return dict_fn[h] = f;
 }
-
-var spaces = [
-	$qIGNORE,
-	$execute,
-	NUM,
-	macrod,
-	$qCOMPILE,
-	cNUM,
-	cSHORT,
-	$COMPILE,
-	SHORT_,
-	nul,
-	nul,
-	nul,
-	variable,
-	nul,
-	nul,
-	nul
-];
 
 function init() {
 	mem = assemble(forth);
