@@ -349,3 +349,4 @@ function $KEY() {
 	ret.push(loop);
 	ret.push($PAUSE);
 }
+builtin("key", $KEY);

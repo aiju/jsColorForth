@@ -198,18 +198,19 @@ var forth = `
 #38
 #40
 ( Calculate Pi )
-& c 8190
+& c 0 
 & b 0
-: a 42 256 * ;
-: init 8189 for 2000 a i + ! -next ;
+: a 64 256 * ;
+: init c @ 4294967295 + for 2000 a i + ! -next ;
 : g b @ 2* 4294967295 + ;
 : d1 b @ * b @ a + @ 10000 * + ;
 : si b @ for i b ! d1 g /mod b @ a + ! next ;
 : o1 c @ 4294967282 + dup c ! 4294967295 + b ! 10000 mod dup ;
 : o2 10000 /mod push + . drop pop ;
 : loop c @ 15 less drop drop if ; then o1 si o2 loop ;
-: ok show black screen text init 0 loop ;
-[ ok ]
+: show0 show nop ;
+: ok show0 black screen text init 0 loop key empty ;
+[ 200 14 * c ! ok ]
 #42
 #44
 #45
