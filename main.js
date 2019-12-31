@@ -51,6 +51,9 @@ function adup() { DUP_(); }
 var lit = adup;
 
 var dict = [];
+var dict_fn = [];
+var dict_name = []; /* for debugging */
+var nojit = [];
 var here = 0;
 var list = [0, 0];
 var mk = [0, 0, 0];
@@ -67,7 +70,7 @@ function enchuck(s) {
 	var nc, b;
 	for(var i = 0; i < s.length; i++){
 		var c = 1 + 'rtoeanismcylgfwdvpbhxuq0123456789j-k.z/;:!+@*,?'.indexOf(s[i]);
-		if(c == 0) throw "unchuckable";
+		if(c == 0) throw new Error("unchuckable");
 		if(c < 8) { nc = 4; b = c; }
 		else if(c < 16) { nc = 5; b = 0x10 | c - 8; }
 		else { nc = 7; b = 0x30; b = 0x60 | c - 16; }
@@ -88,14 +91,28 @@ function enchuck(s) {
 }
 
 function builtin(name, fn) {
+	if(fn.name == '' || fn.name == 'anonymous')
+		throw new Error("don't call builtin_macro with anonymous functions");
 	var w = enchuck(name)[0];
 	forth0.push(w);
-	forth2.push(fn);
+	forth2.push(dict.length);
+	dict[here++] = 0;
+	dict_fn.push(fn);
+	dict_name.push(name);
+	fn.$ = fn.name[0] == '$';
+	nojit.push(true);
 }
 function builtin_macro(name, fn) {
+	if(fn.name == '' || fn.name == 'anonymous')
+		throw new Error("don't call builtin_macro with anonymous functions");
 	var w = enchuck(name)[0];
 	macro0.push(w);
-	macro2.push(fn);
+	macro2.push(dict.length);
+	dict[here++] = 0;
+	dict_fn.push(fn);
+	dict_name.push(name);
+	fn.$ = fn.name[0] == '$';
+	nojit.push(true);
 }
 
 var INS_NOP = 0;
@@ -212,7 +229,7 @@ var sleeping = true;
 var sleepmagic = new Object;
 
 function $SLEEP(fn) {
-	if(me != 'god') throw '$SLEEP from main thread';
+	if(me != 'god') throw new Error('$SLEEP from main thread');
 	function loop() {
 		if(!fn()){
 			ret.push(loop);
@@ -296,7 +313,7 @@ function $execute(word) {
 		ret.push($ABORT);
 	}else{
 		DROP();
-		ret.push(forth2[r]);
+		ret.push(dict_fn[forth2[r]]);
 	}
 }
 
@@ -326,8 +343,9 @@ builtin("forth", FORTH);
 function macrod(word) {
 	macro0.push(word & -16);
 	var h = here;
-	var r = macro2.length;
-	macro2.push(() => (macro2[r] = jit(h))());
+	macro2.push(h);
+	dict_fn[h] = () => jit(h)();
+	dict_name[h] = dechuck(word & -16);
 	list[0] = undefined;
 	lit = adup;
 }
@@ -335,8 +353,9 @@ function macrod(word) {
 function forthd(word) {
 	forth0.push(word & -16);
 	var h = here;
-	var r = forth2.length;
-	forth2.push(() => (forth2[r] = jit(h))());
+	forth2.push(h);
+	dict_fn[h] = () => jit(h)();
+	dict_name[h] = dechuck(word & -16);
 	list[0] = undefined;
 	lit = adup;
 }
@@ -349,7 +368,7 @@ function $qCOMPILE(word) {
 	r = macro0.lastIndexOf(tos);
 	if(r >= 0){
 		DROP();
-		ret.push(macro2[r]);
+		ret.push(dict_fn[macro2[r]]);
 	}else{
 		r = forth0.lastIndexOf(tos);
 		if(r < 0){
@@ -398,10 +417,22 @@ function cSHORT(word) {
 
 function variable(word) {
 	forth0.push(word & -16);
+	forth2.push(dict.length);
+	dict_fn[dict.length] = () => {DUP_(); tos = a;};
+	dict_fn[dict.length].$ = false;
+	dict_name[dict.length] = dechuck(word & -16);
+	nojit[dict.length] = true;
+	dict.push(0);
 	let a = next;
-	forth2.push(() => {DUP_(); tos = a;});
+	dict_name[h] = dechuck(word);
 	macro0.push(word & -16);
-	macro2.push(() => {lit(); tos = a; literal(); DROP();});
+	forth2.push(dict.length);
+	dict.push(0);
+	dict_fn[dict.length] = () => {lit(); tos = a; literal(); DROP();};
+	dict_fn[dict.length].$ = false;
+	dict_name[dict.length] = dechuck(word & -16);
+	nojit[dict.length] = true;
+	dict.push(0);
 	list[0] = undefined;
 	lit = adup;
 	next++;
@@ -532,24 +563,40 @@ function master() {
 	}
 }
 
+function dict_$(n) {
+	var f = dict_fn[n];
+	if(f !== undefined && f.$ !== undefined)
+		return f.$;
+	return jit_instrs[n].$;
+}
+
 function common(t) { }
-function Basic(id, s, n) { this.id = id; this.stat = s; this.next = [n]; common(this); }
+function Basic(id, s, n, $) { this.id = id; this.stat = s; this.next = [n]; common(this); this.is$ = () => !!$; }
 function Semi(id) { this.id = id; this.next = []; common(this); }
-function JSCall(id, f, n) { this.id = id; this.fun = f; this.next = [n]; common(this); }
+function JSCall(id, f, n) { this.id = id; this.fun = f; this.next = [n]; if(!nojit[f]) this.next.push(f); common(this); }
 function Cond(id, c, t, e) { this.id = id; this.cond = c; this.next = [t,e]; common(this); }
 function Next(id, c, t, e) { this.id = id; this.cond = c; this.next = [t,e]; common(this); }
 
 Basic.prototype.mktext = function(n) { return this.stat + "\n" + n[0]; };
 Semi.prototype.mktext = function(n) { return ""; };
 JSCall.prototype.mktext = function(n) {
-	var s = "";
-	if(n[0] != "")
-		s += "ret.push(() => {" + n[0] + "});\n"
-	s += "ret.push(" + this.fun + ");"
-	return s;
+	if(dict_$(this.fun) === false){
+		return "dict_fn[" + this.fun + "](); /* " + dict_name[this.fun] + " */\n" + n[0];
+	}else{
+		var s = "";
+		if(n[0] != "")
+			s += "ret.push(() => {" + n[0] + "});\n"
+		s += "ret.push(dict_fn[" + this.fun + "]); /* " + dict_name[this.fun] + " */ "
+		return s;
+	}
 };
 Cond.prototype.mktext = function(n) { return "if(" + this.cond + ") {\n" + n[0] + "} else {\n" + n[1] + "}"; };
 Next.prototype.mktext = function(n) { return "if(--ret[ret.length - 1] " + this.cond + ") {\n" + n[0] + "} else {\nret.pop();\n" + n[1] + "}"; };
+
+Semi.prototype.is$ = () => false;
+JSCall.prototype.is$ = () => false;
+Cond.prototype.is$ = () => false;
+Next.prototype.is$ = () => true;
 
 var jit_instrs = [];
 
@@ -561,8 +608,8 @@ function jit_instr(h) {
 	case INS_DROP: return new Basic(h, "tos = data.pop() | 0;", h + 1);
 	case INS_SETTOS: return new Basic(h, "tos = " + dict[h+1] + ";", h + 2);
 	case INS_NOT: return new Basic(h, "tos = ~tos;", h + 1);
-	case INS_PUSH: return new Basic(h, "ret.push(tos);", h + 1);
-	case INS_POP: return new Basic(h, "tos = ret.pop();", h + 1);
+	case INS_PUSH: return new Basic(h, "ret.push(tos);", h + 1, true);
+	case INS_POP: return new Basic(h, "tos = ret.pop();", h + 1, true);
 	case INS_ADD: return new Basic(h, "tos = 0 | tos + data.pop();", h + 1);
 	case INS_MUL: return new Basic(h, "tos = 0 | tos * data.pop();", h + 1);
 	case INS_UPLUS: return new Basic(h, "data[data.length - 2] += tos;", h + 1);
@@ -582,74 +629,68 @@ function jit_instr(h) {
 	case INS_MOD: return new Basic(h, "tos = data.pop() % tos;", h + 1);
 	case INS_LESS: return new Basic(h, "flag = data[data.length - 1] < tos;", h + 1);
 
-	case INS_FORTH: return new JSCall(h, "forth2[" + dict[h+1] + "]", h+2);
-	case INS_MACRO: return new JSCall(h, "macro2[" + dict[h+1] + "]", h+2);
+	case INS_FORTH: return new JSCall(h, forth2[dict[h+1]], h+2);
+	case INS_MACRO: return new JSCall(h, macro2[dict[h+1]], h+2);
 	case INS_JYES: return new Cond(h, "flag", dict[h+1], h+2);
 	case INS_JNO: return new Cond(h, "!flag", dict[h+1], h+2);
 	case INS_NEXT: return new Next(h, "> 0", dict[h+1], h+2);
 	case INS_0NEXT: return new Next(h, ">= 0", dict[h+1], h+2);
-	default: throw "invalid opcode " + dict[h];
+	default: throw new Error("invalid opcode " + dict[h]);
 	}
 }
 
-function jit_instr_loop(start) {
+function jit_loop(start) {
 	if(start in jit_instrs) return jit_instrs[start];
+
+	var namectr = 0
+	var named = {};
+
+	function handle(p) {
+		var n = [];
+		var $ = false;
+		for(var i = 0; i < p.next.length; i++){
+			p.next[i] = jit_instrs[p.next[i]];
+			if(p.next[i].text === undefined){
+				named[p.next[i].id] = '_' + namectr++;
+				n.push("ret.push(" + named[p.next[i].id] + ");");
+				$ = true;
+			}else{
+				n.push(p.next[i].text);
+				if(p.next[i].$ !== false)
+					$ = true;
+			}
+		}
+		let t = p.mktext(n);
+		if(named[p.id]){
+			p.text = "function " + named[p.id] + "() {\n" + t + "}\nret.push(" + named[p.id] + ");";
+			p.$ = true;
+		}else{
+			p.text = t;
+			p.$ = $ || p.is$();
+		}
+	}
+
 	var qu = [start];
 	while(qu.length != 0){
-		let h = qu.shift();
-		if(h instanceof Function) {h();continue;}
+		let h = qu.pop();
+		if(h instanceof Function) {h(); continue;}
 		if(h in jit_instrs) continue;
 		let p = jit_instr(h);
 		jit_instrs[h] = p;
+		qu.push(() => handle(p));
 		p.next.forEach(x => {
 			if(!(x in jit_instrs))
 				qu.push(x);
 		});
-		if(p.next.length != 0)
-			qu.push(() => {
-				for(var i = 0; i < p.next.length; i++)
-					p.next[i] = jit_instrs[p.next[i]];
-			});
 	}
 	return jit_instrs[start];
 }
 
-function jit_unfold(p) {
-	if(p.text !== undefined) return;
-	var seen = {};
-	var named = {};
-	var namectr = 0;
-	var qu = [p];
-	while(qu.length != 0){
-		let h = qu.pop();
-		if(h instanceof Function) {h(); continue;}
-		if(seen[h.id]) continue;
-		seen[h.id] = true;
-		qu.push(() => {
-			let n = h.next.map(x => {
-				if(x.text === undefined){
-					named[x.id] = '_' + namectr++;
-					return "ret.push(" + named[x.id] + ");"
-				}else
-					return x.text;
-			});
-			let t = h.mktext(n);
-			if(named[h.id])
-				h.text = "function " + named[h.id] + "() {\n" + t + "}\nret.push(" + named[h.id] + ");";
-			else
-				h.text = t;
-		});
-		h.next.forEach(x => {
-			if(!seen[x.id])
-				qu.push(x);
-		});
-	}
-}
-
 function jit(h) {
-	var p = jit_instr_loop(h);
-	jit_unfold(p);
-	return new Function(p.text);
+	var p = jit_loop(h);
+	var f = new Function(p.text);
+	f.$ = p.$;
+	return dict_fn[h] = f;
 }
 
 var spaces = [

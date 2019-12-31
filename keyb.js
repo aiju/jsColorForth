@@ -230,7 +230,7 @@ function $EX1() {
 		ret.push($ABORT1);
 	else{
 		DROP();
-		ret.push(forth2[r]);
+		ret.push(dict_fn[forth2[r]]);
 	}
 }
 
