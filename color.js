@@ -804,15 +804,140 @@ function $KEY() {
 
 var hp = 1024;
 var vp = 768;
-var canvas, ctx, imageData;
-var frame;
-var fore = 0;
+var canvas, ctx;
+var fore, forestr;
 var xc = 0;
 var yc = 0;
 var xy = [3, 3];
 
+function LRU(N, mask) {
+	this.N = N;
+	this.next = new Array(N+1);
+	this.prev = new Array(N+1);
+	for(var i = N; i >= 0; i--){
+		if(i == N || (i & ~mask) == 0){
+			this.next[i] = i;
+			this.prev[i] = i;
+			this.used(i);
+		}
+	}
+}
+LRU.prototype.used = function(i) {
+	this.next[this.prev[i]] = this.next[i];
+	this.prev[this.next[i]] = this.prev[i];
+	this.next[i] = this.next[this.N];
+	this.prev[i] = this.N;
+	this.next[this.N] = i;
+	this.prev[this.next[i]] = i;
+}
+LRU.prototype.get = function() {
+	return this.prev[this.N];
+}
+
+var fontcache = (function(){
+	var canvas, ctx, data, buf;
+	var state = [];
+	var r = {};
+	var chars = {};
+	var N = 256;
+	var by = 16;
+	var bmask = N - 1 & ~(by | 1);
+	var slots = new Array(N);
+	var lru = new LRU(N, -1);
+	var lrub = new LRU(N, bmask);
+	
+	function sx(i) { return (i & by - 1) * 16; }
+	function sy(i) { return (i >> 4) * 24; }
+	r.init = function() {
+		canvas = document.createElement('canvas');
+		canvas.width = by*16;
+		canvas.height = (N/by|0)*24;
+		ctx = canvas.getContext('2d');
+		data = ctx.createImageData(16*2, 24*2);
+		buf = new Uint32Array(data.data.buffer);
+		for(var i = 0; i < 64; i++)
+			slots[i] = '';
+	};
+	function used(i, big) {
+		lru.used(i);
+		lrub.used(i & bmask);
+		if(big){
+			lru.used(i ^ 1);
+			lru.used(i ^ by);
+			lru.used(i ^ by ^ 1);
+		}
+	}
+	function set1(i, ch, col, big) {
+		delete chars[slots[i]];
+		slots[i] = [ch, col, big].toString();
+	}
+	function set(i, ch, col, big) {
+		set1(i, ch, col, big);
+		if(big){
+			set1(i^1, ch, col, big);
+			set1(i^by, ch, col, big);
+			set1(i^by^1, ch, col, big);
+		}
+	}
+	function populate(i, ch, col, big) {
+		var l = 12*256 + 16*24/(8*4)*tos;
+		var p = 0;
+		var w;
+		for(var y = 24; --y >= 0; ){
+			if((y & 1) != 0){
+				w = read(l++);
+				w = w << 16 | w >>> 16;
+				w = w << 8 & 0xff00ff00 | w >> 8 & 0x00ff00ff;
+			}
+			for(var x = 16; --x >= 0; ){
+				if(big){
+					buf[p] = w >> 31 ? col : 0;
+					buf[p+1] = w >> 31 ? col : 0;
+					buf[p+32] = w >> 31 ? col : 0;
+					buf[p+33] = w >> 31 ? col : 0;
+					p += 2;
+				}else{
+					buf[p++] = w >> 31 ? col : 0;
+				}
+				w <<= 1;
+			}
+			if(big)
+				p += 32;
+			else
+				p += 16;
+		}
+		if(big)
+			ctx.putImageData(data, sx(i), sy(i));
+		else
+			ctx.putImageData(data, sx(i), sy(i), 0, 0, 16, 24);
+	};
+	function get(ch, col, big) {
+		var s = [ch, col, big].toString();
+		var i = chars[s];
+		if(i === undefined){
+			i = big ? lrub.get() : lru.get();
+			chars[s] = i;
+			set(i, ch, col, big);
+			populate(i, ch, col, big);
+		}
+		used(i, big);
+		return i;
+	}
+	r.draw = function(targctx, x, y, ch, col, big) {
+		var i = get(ch, col, big);
+		if(big)
+			targctx.drawImage(canvas, sx(i), sy(i), 32, 48, x, y, 32, 48);
+		else
+			targctx.drawImage(canvas, sx(i), sy(i), 16, 24, x, y, 16, 24);
+	};
+	return r;
+})();
+
 function color() {
-	fore = tos >> 16 & 0xff | tos & 0xff00 | (tos & 0xff) << 16 | 0xff << 24;
+	fore = tos << 16 & 0xff0000 | tos & 0xff00 | tos >> 16 & 0xff | 0xff << 24;
+	var s = (tos & 0xffffff).toString(16);
+	s = "#" + "0".repeat(6 - s.length) + s;
+	forestr = s;
 	DROP();
 }
 
@@ -820,12 +945,11 @@ function gfxinit() {
 	canvas = document.getElementById('canvas');
 	canvas.addEventListener('keydown', keypressed);
 	ctx = canvas.getContext('2d');
-	imageData = ctx.createImageData(hp, vp);
-	frame = new Uint32Array(imageData.data.buffer);
+	ctx.imageSmoothingEnabled = false;
+	fontcache.init();
 }
 
 function $SWITCH() {
-	ctx.putImageData(imageData, 0, 0);
 	ret.push($PAUSE);
 }
 
@@ -855,7 +979,7 @@ function clip() {
 	xc = xy[1];
 	if((xc & 0x8000) != 0) xc = 0;
 	xc &= 0xffff;
-	return hp * yc + xc;
+	return [yc, xc];
 }
 
 function box() {
@@ -872,10 +996,8 @@ function box() {
 	if(x > hp) x = hp;
 	x -= xc;
 	if(x < 0) return;
-	for(; y > 0; y--){
-		frame.fill(fore, d, d + x)
-		d += hp;
-	}
+	ctx.fillStyle = forestr;
+	ctx.fillRect(d[1], d[0], x, y);
 }
 
 function line() {
@@ -886,7 +1008,8 @@ function line() {
 	DROP();
 	d -= tos;
 	DROP();
-	frame.fill(fore, d, d + n);
+	ctx.fillStyle = forestr;
+	ctx.fillRect(d[1], d[0], x, 1);
 	xy[0]++;
 }
 
@@ -899,50 +1022,16 @@ var rm = hc * iw;
 var xycr = 0;
 
 function emit() {
-	var w;
 	qcr();
-	tos = 12*256 + 16*24/(8*4)*tos;
 	var d = clip();
-	for(var y = 24; --y >= 0; ){
-		if((y & 1) != 0){
-			w = read(tos++);
-			w = w << 16 | w >>> 16;
-			w = w << 8 & 0xff00ff00 | w >> 8 & 0x00ff00ff;
-		}
-		for(var x = 16; --x >= 0; ){
-			if(w >> 31)
-				frame[d] = fore;
-			d++;
-			w <<= 1;
-		}
-		d += hp - 16;
-	}
+	fontcache.draw(ctx, d[1], d[0], tos, fore, false);
 	DROP();
 	xy[1] += iw;
 }
 
 function emit2() {
-	var w;
-	tos = 12*256 + 16*24/(8*4)*tos;
 	var d = clip();
-	for(var y = 24; --y >= 0; ){
-		if((y & 1) != 0){
-			w = read(tos++);
-			w = w << 16 | w >>> 16;
-			w = w << 8 & 0xff00ff00 | w >> 8 & 0x00ff00ff;
-		}
-		for(var x = 16; --x >= 0; ){
-			if(w >> 31){
-				frame[d] = fore;
-				frame[d+1] = fore;
-				frame[d+hp] = fore;
-				frame[d+hp+1] = fore;
-			}
-			d += 2;
-			w <<= 1;
-		}
-		d += 2*(hp - 16);
-	}
+	fontcache.draw(ctx, d[1], d[0], tos, fore, true);
 	DROP();
 	xy[1] += iw*2;
 }
@@ -1543,8 +1632,10 @@ function master() {
 			ret.pop()();
 		setTimeout(master, 0);
 	}catch(e){
-		if(e !== sleepmagic)
+		if(e !== sleepmagic){
+			console.log(e.stack);
 			throw e;
+		}
 	}
 }
 
