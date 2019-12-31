@@ -613,7 +613,7 @@ Cond.prototype.mktext = function(n) { return "if(" + this.cond + ") {\n" + n[0] 
 Next.prototype.mktext = function(n) { return "if(--ret[ret.length - 1] " + this.cond + ") {\n" + n[0] + "} else {\nret.pop();\n" + n[1] + "}"; };
 
 Semi.prototype.is$ = () => false;
-JSCall.prototype.is$ = () => false;
+JSCall.prototype.is$ = function() { return dict_$(this.fun); };
 Cond.prototype.is$ = () => false;
 Next.prototype.is$ = () => true;
 
@@ -621,7 +621,7 @@ var jit_instrs = [];
 
 function jit_instr(h) {
 	switch(dict[h]){
-	case INS_NOP: return new Basic(h, '', h + 1);
+	case INS_NOP: return new Basic(h, ';', h + 1); /* intentionally breaks tail call optimisation */
 	case INS_SEMI: return new Semi(h, );
 	case INS_DUP: return new Basic(h, "data.push(tos);", h + 1);
 	case INS_DROP: return new Basic(h, "tos = data.pop() | 0;", h + 1);
