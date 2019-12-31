@@ -1,5 +1,4 @@
-from termcolor import colored
-
+#!/usr/bin/python3
 def dechuck(w):
 	s = ""
 	while True:

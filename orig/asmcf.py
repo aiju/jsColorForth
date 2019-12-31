@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import re
 
 lower = re.compile('^[a-z0-9\-./;:!+@*,?]+$')
