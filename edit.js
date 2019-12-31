@@ -1,3 +1,4 @@
+"use strict";
 var bas = dot10;
 var blk = 18;
 var curs = 0;
@@ -26,6 +27,7 @@ function $EDIT() {
 	DROP();
 	ret.push($E);
 }
+builtin("edit", $EDIT);
 function $E() {
 	DUP_();
 	tos = blk;
@@ -35,6 +37,7 @@ function $E() {
 	ret.push($E0_);
 	ret.push($REFRESH);
 }
+builtin("e", $E);
 function $E0() {
 	DROP();
 	ret.push($E0_);
@@ -101,6 +104,7 @@ function unPACK() {
 	tos = (tos & 0o77) - 0o20;
 	return tos;
 }
+builtin("unpack", unPACK);
 
 function $INSERT() {
 	var t = insert0();

@@ -1,8 +1,10 @@
+"use strict";
 function $ACCEPT() {
 	shift = alpha0;
 	board = alpha;
 	ret.push($ACCEPT1);
 }
+builtin("accept", $ACCEPT);
 
 function $ACCEPT1() {
 	ret.push(() => {
@@ -223,7 +225,7 @@ function $EX1() {
 
 	while(--words > 0)
 		DROP();
-	r = FIND();
+	r = forth0.lastIndexOf(tos);
 	if(r < 0)
 		ret.push($ABORT1);
 	else{

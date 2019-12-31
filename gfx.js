@@ -1,3 +1,4 @@
+"use strict";
 var hp = 1024;
 var vp = 768;
 var canvas, ctx;
@@ -136,6 +137,7 @@ function color() {
 	forestr = s;
 	DROP();
 }
+builtin("color", color);
 
 function gfxinit() {
 	canvas = document.getElementById('canvas');
@@ -155,6 +157,7 @@ function AT() {
 	xy[1] = tos & 0xffff;
 	DROP();
 }
+builtin("at", AT);
 
 function pAT() {
 	xy[0] = xy[0] + tos & 0xffff;
@@ -162,11 +165,13 @@ function pAT() {
 	xy[1] = xy[1] + tos & 0xffff;
 	DROP();
 }
+builtin("+at", pAT);
 
 function xy_() {
 	DUP_();
 	tos = xy[0] & 0xffff | xy[1] << 16;
 }
+builtin("xy", xy_);
 
 function clip() {
 	yc = xy[0];
@@ -195,6 +200,7 @@ function box() {
 	ctx.fillStyle = forestr;
 	ctx.fillRect(d[1], d[0], x, y);
 }
+builtin("box", box);
 
 function line() {
 	var d, n;
@@ -208,6 +214,7 @@ function line() {
 	ctx.fillRect(d[1], d[0], x, 1);
 	xy[0]++;
 }
+builtin("line", line);
 
 var iw = 16 + 6;
 var ih = 24 + 6;
@@ -224,6 +231,7 @@ function emit() {
 	DROP();
 	xy[1] += iw;
 }
+builtin("emit", emit);
 
 function emit2() {
 	var d = clip();
@@ -231,6 +239,7 @@ function emit2() {
 	DROP();
 	xy[1] += iw*2;
 }
+builtin("2emit", emit2);
 
 function text1() {
 	WHITE();
@@ -239,6 +248,7 @@ function text1() {
 	xy = [3, lm];
 	xycr = [3, lm];
 }
+builtin("text", text1);
 
 function qcr() {
 	if(xy[1] >= rm) cr();
@@ -247,9 +257,12 @@ function cr() {
 	xy[0] += ih;
 	xy[1] = lm;
 }
+builtin("cr", cr);
+
 function space() {
 	xy[1] += iw;
 }
+builtin("space", space);
 
 function qdot() { if(base != 10) dot(); else dot10(); }
 var tens = [ 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000 ];
@@ -282,6 +295,7 @@ function dot10() {
 	space();
 	DROP();
 }
+builtin(".", dot10);
 
 var hicon = [
 	0o30, 0o31, 0o32, 0o33, 0o34, 0o35, 0o36, 0o37,
@@ -293,6 +307,7 @@ function eDIG() {
 	tos = hicon[tos];
 	emit();
 }
+builtin("digit", eDIG);
 function oDIG() {
 	tos = tos << 4 | tos >>> 28;
 	DUP_();
@@ -329,6 +344,7 @@ function hdotn() {
 	}
 	DROP();
 }
+builtin("h.n", hdotn);
 function hdot() {
 	for(var i = 8; i > 0; i--){
 		oDIG();
@@ -336,6 +352,7 @@ function hdot() {
 	}
 	DROP();
 }
+builtin("h.", hdot);
 
 function keyboard() {
 	text1();
@@ -383,16 +400,7 @@ function keyboard() {
 		emit();
 	}
 }
-
-function mpad() {
-	dict[here] = INS_DUP;
-	dict[here+1] = INS_SETTOS;
-	dict[here+2] = here + 6;
-	dict[here+3] = INS_FORTH;
-	dict[here+4] = 1;
-	dict[here+5] = INS_SEMI;
-	here += 6;
-}
+builtin("keyboard", keyboard);
 
 function $pad() {
 	board = [];
@@ -415,6 +423,19 @@ function $pad() {
 	}
 	ret.push(loop);
 }
+var pad_fn = forth2.length;
+builtin(".pad", $pad);
+
+function mpad() {
+	dict[here] = INS_DUP;
+	dict[here+1] = INS_SETTOS;
+	dict[here+2] = here + 6;
+	dict[here+3] = INS_FORTH;
+	dict[here+4] = pad_fn;
+	dict[here+5] = INS_SEMI;
+	here += 6;
+}
+builtin_macro("pad", mpad);
 
 var yellow = 0xffff00;
 function WHITE() { DUP_(); tos = 0xffffff; color(); }

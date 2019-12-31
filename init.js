@@ -291,33 +291,6 @@ function ctz(n) {
 	return k;
 }
 
-function enchuck(s) {
-	var w = 0;
-	var n = 0;
-	var r = [];
-	var nc, b;
-	for(var i = 0; i < s.length; i++){
-		var c = 1 + 'rtoeanismcylgfwdvpbhxuq0123456789j-k.z/;:!+@*,?'.indexOf(s[i]);
-		if(c == 0) throw "unchuckable";
-		if(c < 8) { nc = 4; b = c; }
-		else if(c < 16) { nc = 5; b = 0x10 | c - 8; }
-		else { nc = 7; b = 0x30; b = 0x60 | c - 16; }
-		if(n + nc - ctz(b) > 28){
-			r.push(w << 32 - n);
-			w = 0;
-			n = 0;
-		}else if(n + nc > 28){
-			b >>= n + nc - 28;
-			nc = 28 - n;
-		}
-		w = w << nc | b;
-		n += nc;
-	}
-	if(n != 0)
-		r.push(w << 32 - n);
-	return r;
-}
-
 function dechuck(w){
 	var s, c;
 

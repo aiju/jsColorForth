@@ -55,6 +55,49 @@ var here = 0;
 var list = [0, 0];
 var mk = [0, 0, 0];
 
+var forth0 = [];
+var forth2 = [];
+var macro0 = [];
+var macro2 = [];
+
+function enchuck(s) {
+	var w = 0;
+	var n = 0;
+	var r = [];
+	var nc, b;
+	for(var i = 0; i < s.length; i++){
+		var c = 1 + 'rtoeanismcylgfwdvpbhxuq0123456789j-k.z/;:!+@*,?'.indexOf(s[i]);
+		if(c == 0) throw "unchuckable";
+		if(c < 8) { nc = 4; b = c; }
+		else if(c < 16) { nc = 5; b = 0x10 | c - 8; }
+		else { nc = 7; b = 0x30; b = 0x60 | c - 16; }
+		if(n + nc - ctz(b) > 28){
+			r.push(w << 32 - n);
+			w = 0;
+			n = 0;
+		}else if(n + nc > 28){
+			b >>= n + nc - 28;
+			nc = 28 - n;
+		}
+		w = w << nc | b;
+		n += nc;
+	}
+	if(n != 0)
+		r.push(w << 32 - n);
+	return r;
+}
+
+function builtin(name, fn) {
+	var w = enchuck(name)[0];
+	forth0.push(w);
+	forth2.push(fn);
+}
+function builtin_macro(name, fn) {
+	var w = enchuck(name)[0];
+	macro0.push(w);
+	macro2.push(fn);
+}
+
 var INS_NOP = 0;
 var INS_DUP = 1;
 var INS_DROP = 2;
@@ -114,6 +157,7 @@ function $start() {
 	ret.push(() => {DUP_(); tos = 18;});
 	ret.push($show0);
 }
+builtin("warm", $start);
 
 function $show0() {
 	ret.push(function(){});
@@ -133,6 +177,7 @@ function $SHOW() {
 	ret.push($loop);
 	ret.push($ACT);
 }
+builtin("show", $SHOW);
 
 function $ACT() {
 	main_data.length = 0;
@@ -141,10 +186,12 @@ function $ACT() {
 	main_ret.push(ret.pop());
 	DROP();
 }
+builtin("act", $ACT);
 
 function c_() {
 	god_data = [0, 0];
 }
+builtin("c", c_);
 
 function $PAUSE() {
 	DUP_();
@@ -159,6 +206,7 @@ function $PAUSE() {
 	}
 	DROP();
 }
+builtin("pause", $PAUSE);
 
 var sleeping = true;
 var sleepmagic = new Object;
@@ -189,6 +237,7 @@ function delay() {
 	DROP();
 	ret.push(() => $SLEEP(() => expired));
 }
+builtin("delay", delay);
 
 function $ABORT() {
 	curs = next;
@@ -213,6 +262,7 @@ function $LOAD() {
 	DROP();
 	ret.push($INTER);
 }
+builtin("load", $LOAD);
 
 function $INTER() {
 	var word, f;
@@ -240,7 +290,7 @@ function $execute(word) {
 	lit = alit;
 	DUP_();
 	tos = word & -16;
-	r = FIND();
+	r = forth0.lastIndexOf(tos);
 	if(r < 0){
 		console.log("not found " + dechuck(word & -16));
 		ret.push($ABORT);
@@ -248,14 +298,6 @@ function $execute(word) {
 		DROP();
 		ret.push(forth2[r]);
 	}
-}
-
-function FIND() {
-	return forth0.lastIndexOf(tos);
-}
-
-function mFIND() {
-	return macro0.lastIndexOf(tos);
 }
 
 function NUM(word) {
@@ -274,10 +316,12 @@ function SHORT_(word) {
 function MACRO(word) {
 	spaces[3] = macrod;
 }
+builtin("macro", MACRO);
 
 function FORTH(word) {
 	spaces[3] = forthd;
 }
+builtin("forth", FORTH);
 
 function macrod(word) {
 	macro0.push(word & -16);
@@ -302,12 +346,12 @@ function $qCOMPILE(word) {
 
 	lit();
 	tos = word & -16;
-	r = mFIND();
+	r = macro0.lastIndexOf(tos);
 	if(r >= 0){
 		DROP();
 		ret.push(macro2[r]);
 	}else{
-		r = FIND();
+		r = forth0.lastIndexOf(tos);
 		if(r < 0){
 			console.log("not found " + dechuck(word & -16));
 			ret.push($ABORT);
@@ -325,7 +369,7 @@ function $COMPILE(word) {
 
 	lit();
 	tos = word & -16;
-	r = mFIND();
+	r = macro0.lastIndexOf(tos);
 	if(r < 0){
 		console.log("not found " + dechuck(word & -16));
 		ret.push($ABORT);
@@ -367,10 +411,12 @@ function cdrop() {
 	list[0] = here;
 	dict[here++] = INS_DROP;
 }
+builtin_macro("drop", cdrop);
 
 function cdup() {
 	dict[here++] = INS_DUP;
 }
+builtin_macro("dup", cdup);
 
 function qdup() {
 	if(list[0] != here-1 || dict[here-1] != INS_DROP)
@@ -378,6 +424,7 @@ function qdup() {
 	else
 		here--;
 }
+builtin_macro("?dup", qdup);
 
 function qlit() {
 	if(list[0] != here-2 || dict[here-2] != INS_SETTOS)
@@ -394,6 +441,7 @@ function qlit() {
 		}
 	}
 }
+builtin("?lit", qlit);
 
 function literal() {
 	qdup();
@@ -406,51 +454,62 @@ function literal() {
 function semi() {
 	dict[here++] = INS_SEMI;
 }
+builtin_macro(";", semi);
 
 function then() {
 	list[0] = undefined;
 	dict[tos-1] = here;
 	DROP();
 }
+builtin_macro("then", then);
 
 function begin() {
 	list[0] = undefined;
 	DUP_();
 	tos = here;
 }
+builtin_macro("begin", begin);
 
 function comma() {
 	dict[here++] = tos;
 	DROP();
 }
+builtin(",", comma);
 
 function HERE() {
 	DUP_();
 	tos = here;
 }
+builtin("here", HERE);
 
 function mark() {
 	mk = [macro0.length, forth0.length, here];
 }
+builtin("mark", mark);
 
 function empty() {
 	macro2.length = macro0.length = mk[0];
 	forth2.length = forth0.length = mk[1];
 	here = mk[2];
 }
+builtin("empt", empty);
+
 function log() {
 	console.log(data, tos);
 }
+builtin("log", log);
 
 function debug() {
 	debugger;
 }
+builtin("debug", debug);
 
 function erase() {
 	var n = tos << 8; DROP();
 	var a = tos << 8; DROP();
 	mem.fill(0, a, a + n);
 }
+builtin("erase", erase);
 
 function $copy() {
 	if(tos < 12) ret.push($ABORT1);
@@ -458,6 +517,7 @@ function $copy() {
 	memmove(a << 8, blk << 8, 256);
 	blk = a;
 }
+builtin("copy", $copy);
 
 function master() {
 	try {
@@ -611,113 +671,7 @@ var spaces = [
 	nul
 ];
 
-var macro0, forth0, macro2, forth2;
-
 function init() {
-macro0 = [
-	";",
-	"dup",
-	"?dup",
-	"drop",
-	"then",
-	"begin",
-	"pad",
-].map(x => enchuck(x)[0]);
-
-forth0 = [
-	"warm",
-	".pad",
-	"pause",
-	"macro",
-	"forth",
-	"c",
-	"act",
-	"show",
-	"load",
-	"here",
-	"?lit",
-	",",
-	"accept",
-	"erase",
-	"copy",
-	"mark",
-	"empt",
-	"emit",
-	"digit",
-	"2emit",
-	".",
-	"h.",
-	"h.n",
-	"cr",
-	"space",
-	"edit",
-	"e",
-	"text",
-	"keyboard",
-	"at",
-	"+at",
-	"xy",
-	"box",
-	"color",
-	"unpack",
-	"log",
-	"line",
-	"debug",
-	"delay"
-].map(x => enchuck(x)[0]);
-
-macro2 = [
-	semi,
-	cdup,
-	qdup,
-	cdrop,
-	then,
-	begin,
-	mpad
-];
-
-forth2 = [
-	$start,
-	$pad, // entry-number hardcoded
-	$PAUSE,
-	MACRO,
-	FORTH,
-	c_,
-	$ACT,
-	$SHOW,
-	$LOAD,
-	HERE,
-	qlit,
-	comma,
-	$ACCEPT,
-	erase,
-	$copy,
-	mark,
-	empty,
-	emit,
-	eDIG,
-	emit2,
-	dot10,
-	hdot,
-	hdotn,
-	cr,
-	space,
-	$EDIT,
-	$E,
-	text1,
-	keyboard,
-	AT,
-	pAT,
-	xy_,
-	box,
-	color,
-	unPACK,
-	log,
-	line,
-	debug,
-	delay
-];
-
 	mem = assemble(forth);
 	for(var i = 0; i < iconstr.length / 4; i++)
 		mem[12*256 + i] =
