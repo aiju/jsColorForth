@@ -417,21 +417,21 @@ function cSHORT(word) {
 
 function variable(word) {
 	forth0.push(word & -16);
-	forth2.push(dict.length);
-	dict_fn[dict.length] = () => {DUP_(); tos = a;};
-	dict_fn[dict.length].$ = false;
-	dict_name[dict.length] = dechuck(word & -16);
-	nojit[dict.length] = true;
-	dict.push(0);
+	forth2.push(here);
+	dict_fn[here] = () => {DUP_(); tos = a;};
+	dict_fn[here].$ = false;
+	dict_name[here] = dechuck(word & -16);
+	nojit[here] = true;
+	dict[here++] = 0;
 	let a = next;
 	macro0.push(word & -16);
-	forth2.push(dict.length);
+	macro2.push(here);
 	dict.push(0);
-	dict_fn[dict.length] = () => {lit(); tos = a; literal(); DROP();};
-	dict_fn[dict.length].$ = false;
-	dict_name[dict.length] = dechuck(word & -16);
-	nojit[dict.length] = true;
-	dict.push(0);
+	dict_fn[here] = () => {lit(); tos = a; literal(); DROP();};
+	dict_fn[here].$ = false;
+	dict_name[here] = dechuck(word & -16);
+	nojit[here] = true;
+	dict[here++] = 0;
 	list[0] = undefined;
 	lit = adup;
 	next++;

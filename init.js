@@ -39,7 +39,7 @@ var forth = `
 : less =INS_LESS , ;
 : over [[ ?dup ]] =INS_OVER , ;
 : push =INS_PUSH , [[ drop ]] ;
-: pop [[ ?dup ]] =INS_POP ,
+: pop [[ ?dup ]] =INS_POP , ;
 : - =INS_NOT , ;
 #25
 ( Wordcode macros: , compiles 1 word )
