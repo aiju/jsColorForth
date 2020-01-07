@@ -8,7 +8,8 @@
    
    #16  switch block 
    $2A  hex constant
-   $$0  number as text word (not number)
+   \0   number as text word (not number)
+   \:   colon as word (not define)
    =expr  replaced with eval("expr")
 */
 
@@ -81,10 +82,11 @@ var forth = `
 : abs dup negate 
 : max less if swap then drop ; 
 : v+ ( vv-v ) push u+ pop + ; 
-( writes )
-( reads )
-( oadf )
-( save )
+: writes ( acn ) for write next drop drop ;
+: reads ( acn ) for read next drop drop ;
+: rest 0 dup nc reads ;
+: oadf ( qwerty )
+: save 0 dup nc writes ;
 #29
 ( These macros may be white, others may not ) 
 : @ etc ( Arithmetic ) 
@@ -330,6 +332,7 @@ function dechuck(w){
 }
 
 function do_comment(w) {
+	if(w[0] == '\\') w = w.substr(1);
 	var r = enchuck(w.toLowerCase());
 	if(w.match(/^[a-z0-9\-./;:!+@*,?]+$/))
 		r[0] |= 9;
@@ -366,7 +369,7 @@ function do_word(w, execute, cyan, next) {
 	return r;
 }
 
-function assemble(src) {
+function assemble(src, single) {
 	var words = src.split(/[ \t\n]+/);
 	var blocks = {};
 	var cur = 0;
@@ -374,13 +377,16 @@ function assemble(src) {
 	var execute = false;
 	var cyan = false;
 	var next = '';
+	if(single) blocks[cur] = [];
 	for(var i = 0; i < words.length; i++){
 		var w = words[i];
 		var r = [];
 		if(w == '') continue;
-		if(w[0] == '=')
+		if(w[0] == '=' && !single)
 			w = eval(w.substring(1)).toString();
-		if(w[0] == '#'){
+		if(w[0] == '%')
+			r = [Number.parseInt(w.substring(1), 16)];
+		else if(w[0] == '#' && !single){
 			cur = parseInt(w.substring(1));
 			if(!(cur in blocks))
 				blocks[cur] = [];
@@ -409,10 +415,13 @@ function assemble(src) {
 		}else if(w == '&'){
 			if(execute || cyan || next != '') throw "syntax error";
 			next = 'magenta';
-		}else if(w.match(/^\$\$/)){
+		}else if(w[0] == '\\'){
 			if(next == 'magenta-num') throw "syntax error";
-			r = do_word(w.substring(2), execute, cyan, next);
-			next = '';
+			r = do_word(w.substring(1), execute, cyan, next);
+			if(next == 'magenta')
+				next = 'magenta-num';
+			else
+				next = '';
 		}else if(w.match(/^\$[0-9a-fA-F]+$/)){
 			if(cyan || (next != '' && next != 'magenta-num')) throw "syntax error";
 			r = do_number(parseInt(w.substring(1), 16), true, execute, next == 'magenta-num');
@@ -431,8 +440,14 @@ function assemble(src) {
 		}
 		blocks[cur].push.apply(blocks[cur], r);
 	}
+	if(single){
+		var r = new Uint32Array(256);
+		if(0 in blocks)
+			r.set(blocks[0]);
+		return r;
+	}
 	var r = new Uint32Array(256 * 128);
-	for(var i = 0; i < 63; i++){
+	for(var i = 0; i < 128; i++){
 		var b = blocks[i];
 		if(b !== undefined)
 			r.set(b, i * 256);

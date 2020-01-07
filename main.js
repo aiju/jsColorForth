@@ -70,7 +70,7 @@ function enchuck(s) {
 	var nc, b;
 	for(var i = 0; i < s.length; i++){
 		var c = 1 + 'rtoeanismcylgfwdvpbhxuq0123456789j-k.z/;:!+@*,?'.indexOf(s[i]);
-		if(c == 0) throw new Error("unchuckable");
+		if(c == 0) throw new Error("unchuckable: " + s);
 		if(c < 8) { nc = 4; b = c; }
 		else if(c < 16) { nc = 5; b = 0x10 | c - 8; }
 		else { nc = 7; b = 0x30; b = 0x60 | c - 16; }
